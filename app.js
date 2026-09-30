@@ -63,26 +63,6 @@ const submitBtn = document.getElementById('submitBtn');
 const formStatus = document.getElementById('formStatus');
 const mobileCheckStatus = document.getElementById('mobileCheckStatus');
 
-let mobileAlreadyRegistered = false;
-let mobileVerificationPassed = false;
-let mobileCheckTimer = null;
-let mobileCheckRequestId = 0;
-
-function setRegistrationFieldsLocked(locked) {
-  Array.from(registrationForm.elements).forEach(function (control) {
-    if (control.name === 'studentMobile') return;
-    if (control.type === 'submit') return;
-    control.disabled = !!locked;
-  });
-
-  if (locked) {
-    submitBtn.disabled = true;
-  } else {
-    submitBtn.disabled = !mobileVerificationPassed || mobileAlreadyRegistered;
-    const isCollege = qualificationSelect && qualificationSelect.value === 'College';
-    if (collegeLevelSelect) collegeLevelSelect.disabled = !isCollege;
-  }
-}
 
 const validators = {
   studentName: function (v) {
@@ -196,72 +176,14 @@ Object.keys(validators).forEach(function (fieldName) {
     e.target.value = e.target.value.replace(/[^0-9]/g, '');
 
     if (fieldName === 'studentMobile') {
-      scheduleMobileDuplicateCheck(e.target.value);
+      // Do not check the Google Sheet while typing.
+      // Duplicate checking happens only after Register is clicked.
+      mobileCheckStatus.textContent = '';
+      mobileCheckStatus.className = 'field-hint';
+      showFieldError('studentMobile', '');
     }
   });
 });
-
-async function scheduleMobileDuplicateCheck(mobile) {
-  clearTimeout(mobileCheckTimer);
-  mobileAlreadyRegistered = false;
-  mobileVerificationPassed = false;
-  setRegistrationFieldsLocked(false);
-  submitBtn.disabled = true;
-  mobileCheckStatus.textContent = '';
-  mobileCheckStatus.className = 'field-hint';
-  showFieldError('studentMobile', '');
-
-  if (!/^[0-9]{10}$/.test(mobile)) {
-    return;
-  }
-
-  const requestId = ++mobileCheckRequestId;
-
-  mobileCheckTimer = setTimeout(async function () {
-    mobileCheckStatus.textContent = 'Checking mobile number…';
-    mobileCheckStatus.className = 'field-hint checking';
-    submitBtn.disabled = true;
-
-    try {
-      const result = await callApi('checkMobile', { studentMobile: mobile });
-
-      if (requestId !== mobileCheckRequestId) return;
-
-      if (result.success && result.registered) {
-        mobileAlreadyRegistered = true;
-        mobileVerificationPassed = false;
-        mobileCheckStatus.textContent = 'This mobile number is already registered.';
-        mobileCheckStatus.className = 'field-hint duplicate';
-        showFieldError('studentMobile', 'This mobile number is already registered.');
-
-        // Do not allow the user to continue entering the remaining details.
-        setRegistrationFieldsLocked(true);
-      } else if (result.success) {
-        mobileAlreadyRegistered = false;
-        mobileVerificationPassed = true;
-        mobileCheckStatus.textContent = 'Mobile number is available.';
-        mobileCheckStatus.className = 'field-hint available';
-        showFieldError('studentMobile', '');
-        setRegistrationFieldsLocked(false);
-      } else {
-        mobileAlreadyRegistered = false;
-        mobileVerificationPassed = false;
-        mobileCheckStatus.textContent = result.message || 'Could not verify this mobile number.';
-        mobileCheckStatus.className = 'field-hint duplicate';
-        submitBtn.disabled = true;
-      }
-    } catch (err) {
-      if (requestId !== mobileCheckRequestId) return;
-
-      mobileAlreadyRegistered = false;
-      mobileVerificationPassed = false;
-      mobileCheckStatus.textContent = 'Unable to verify the mobile number. Please try again.';
-      mobileCheckStatus.className = 'field-hint duplicate';
-      submitBtn.disabled = true;
-    }
-  }, 350);
-}
-
 
 const qualificationSelect = document.getElementById('qualification');
 const collegeLevelField = document.getElementById('collegeLevelField');
@@ -278,24 +200,13 @@ qualificationSelect.addEventListener('change', function () {
     showFieldError('collegeLevel', '');
   }
 
-  collegeLevelSelect.disabled = !isCollege || mobileAlreadyRegistered;
+  collegeLevelSelect.disabled = !isCollege;
   validateField('qualification');
 });
 
 registrationForm.addEventListener('submit', async function (e) {
   e.preventDefault();
 
-  if (mobileAlreadyRegistered) {
-    formStatus.textContent = 'This student mobile number is already registered.';
-    formStatus.classList.remove('ok');
-    return;
-  }
-
-  if (!mobileVerificationPassed) {
-    formStatus.textContent = 'Please enter a new 10-digit student mobile number and wait for verification.';
-    formStatus.classList.remove('ok');
-    return;
-  }
 
   let isValid = true;
 
@@ -343,8 +254,6 @@ registrationForm.addEventListener('submit', async function (e) {
       collegeLevelField.classList.add('hidden');
       collegeLevelSelect.required = false;
 
-      mobileAlreadyRegistered = false;
-      mobileVerificationPassed = false;
       mobileCheckStatus.textContent = '';
       mobileCheckStatus.className = 'field-hint';
 
@@ -358,10 +267,15 @@ registrationForm.addEventListener('submit', async function (e) {
       formStatus.classList.remove('ok');
 
       if (result.alreadyRegistered) {
-        mobileAlreadyRegistered = true;
-        submitBtn.disabled = true;
-        mobileCheckStatus.textContent = 'You are already registered.';
-        mobileCheckStatus.className = 'field-hint duplicate';
+        mobileCheckStatus.textContent = '';
+        mobileCheckStatus.className = 'field-hint';
+        showFieldError(
+          'studentMobile',
+          'This mobile number is already registered.'
+        );
+        formStatus.textContent = '';
+        formStatus.classList.remove('ok');
+        registrationForm.elements.studentMobile.focus();
       }
     }
   } catch (err) {
@@ -369,7 +283,7 @@ registrationForm.addEventListener('submit', async function (e) {
     formStatus.classList.remove('ok');
   } finally {
     submitBtn.textContent = 'Register for workshop';
-    submitBtn.disabled = mobileAlreadyRegistered || !mobileVerificationPassed;
+    submitBtn.disabled = false;
   }
 });
 
