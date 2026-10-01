@@ -81,17 +81,8 @@ const validators = {
     const qualification = registrationForm.elements.qualification.value;
     return qualification === 'College' && !v ? 'Select the college qualification.' : '';
   },
-
-  motherName: function (v) {
-    return v.trim().length >= 3 ? '' : 'Enter the mother name.';
-  },
-
   fatherName: function (v) {
     return v.trim().length >= 3 ? '' : 'Enter the father name.';
-  },
-
-  parentMobile: function (v) {
-    return /^[0-9]{10}$/.test(v.trim()) ? '' : 'Enter a valid 10-digit parent mobile number.';
   },
 
   village: function (v) {
